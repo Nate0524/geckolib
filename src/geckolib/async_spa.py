@@ -12,6 +12,8 @@ from typing import Any
 
 from geckolib.driver.accessor import GeckoStructAccessor
 from geckolib.driver.protocol.reminders import GeckoReminderType
+from geckolib.driver.protocol.getchannel import GeckoChangeChannelProtocolHandler
+from geckolib.driver.protocol.intouchname import GeckoChangeInTouchNameProtocolHandler
 from geckolib.driver.protocol.watercare import (
     GeckoAddWatercareScheduleProtocolHandler,
     GeckoDeleteWatercareScheduleProtocolHandler,
@@ -990,6 +992,47 @@ class GeckoAsyncSpa(Observable):
         )
         if modify_handler is None:
             _LOGGER.error("Cannot modify watercare schedule, protocol retry time exceeded")
+            await self._event_handler(GeckoSpaEvent.ERROR_PROTOCOL_RETRY_TIME_EXCEEDED)
+            return False
+        return True
+
+    async def async_set_channel(self, new_channel: int) -> bool:
+        """Change the RF channel used between the in.touch2 module and the spa pack.
+        Rarely needed -- only if you're seeing interference (RFERR messages)."""
+        if not self.is_connected:
+            _LOGGER.warning("Cannot set channel when spa not connected")
+            return False
+        assert self._protocol is not None  # noqa: S101
+        set_channel_handler = await self._protocol.get(
+            lambda: GeckoChangeChannelProtocolHandler.set(
+                self._protocol.get_and_increment_sequence_counter(),
+                new_channel,
+                parms=self.sendparms,
+            )
+        )
+        if set_channel_handler is None:
+            _LOGGER.error("Cannot set channel, protocol retry time exceeded")
+            await self._event_handler(GeckoSpaEvent.ERROR_PROTOCOL_RETRY_TIME_EXCEEDED)
+            return False
+        return True
+
+    async def async_set_intouch_name(self, new_name: str) -> bool:
+        """Rename the in.touch2 WiFi module (cosmetic, shows up in the official app's
+        device list). No dedicated "get name" verb was found during reverse-engineering,
+        so this is write-only for now."""
+        if not self.is_connected:
+            _LOGGER.warning("Cannot set in.touch2 name when spa not connected")
+            return False
+        assert self._protocol is not None  # noqa: S101
+        set_name_handler = await self._protocol.get(
+            lambda: GeckoChangeInTouchNameProtocolHandler.set(
+                self._protocol.get_and_increment_sequence_counter(),
+                new_name,
+                parms=self.sendparms,
+            )
+        )
+        if set_name_handler is None:
+            _LOGGER.error("Cannot set in.touch2 name, protocol retry time exceeded")
             await self._event_handler(GeckoSpaEvent.ERROR_PROTOCOL_RETRY_TIME_EXCEEDED)
             return False
         return True
