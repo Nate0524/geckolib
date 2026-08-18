@@ -732,3 +732,80 @@ Gecko products so that I can look into how to drive those devices too.
 # Version
 
 Using Semantic versioning https://semver.org/
+
+---
+
+## Fork additions (watercare-schedule-crud branch)
+
+This fork adds control surface that the upstream `geckolib` never implemented, reverse-engineered
+from the official **in.touch2 Android app v2.11.0** (decompiled .NET IL — the app is a Xamarin/
+Mono app, so the real logic lives in embedded C# assemblies, not the Java-side `classes.dex`).
+
+### Added: Watercare schedule CRUD (the main feature)
+
+Upstream `geckolib` could only read/write the watercare *mode* (Standard, Away From Home, etc.)
+and had a completely empty stub for reading the underlying filtration/economy *schedule* — no
+write support existed at all. This fork adds the missing verbs and a real parser:
+
+- `ADDWC`/`WCADD` — add a schedule entry
+- `DELWC`/`WCDEL` — delete a schedule entry
+- `MDFWC`/`WCMDF` — modify an existing schedule entry
+- Real `WCREQ` response parsing (was previously an empty stub) — same 9-byte record layout as
+  the write payloads, confirmed byte-exact against the app's own IL
+
+New classes: `GeckoWatercareSchedule`, `GeckoWatercareScheduleManager` in
+`driver/protocol/watercare.py`. Exposed to Home Assistant via
+`GeckoWaterCare.async_get_schedules()` / `.async_add_schedule()` / `.async_delete_schedule()` /
+`.async_modify_schedule()` in `automation/watercare.py`.
+
+### Added: Human-readable fault/error catalog
+
+`driver/protocol/gecko_errors.py` — ports Gecko's own ~35-entry `ePackError` enum and ~9-entry
+`eInClearError` enum (with friendly names) so raw fault codes can be shown as text instead of
+numbers. Read-only, no new protocol verbs, zero risk.
+
+### Added: RF channel write
+
+Upstream only reads the current RF channel (`CURCH`/`CHCUR`). This fork adds `CHACH`/`CHCHA` to
+actually change it, in `driver/protocol/getchannel.py` — useful if you're seeing RF interference
+(`RFERR` messages) between the in.touch2 module and the spa pack.
+
+### Added: in.touch2 module rename
+
+`driver/protocol/intouchname.py` — `SNAME`/`NAMES`, lets you rename the WiFi module (cosmetic,
+shows up in the official app's device list). Write-only; no dedicated "get name" verb was found
+during reverse-engineering.
+
+### Added: Reminder error ack (`RMERR`)
+
+Minor protocol-completeness item in `driver/protocol/reminders.py`, mirroring the existing
+`WCERR` handler pattern.
+
+### Deliberately NOT included
+
+- **Firmware OTA update** (`FIRMS`/`SFARM`/`SPROG` etc.) — the app has a complete OTA pipeline
+  for both the in.touch2 module and the spa's own control board, fully mapped during this
+  research. Left out on purpose: bricking risk on the spa's control board is a poor tradeoff for
+  a hobbyist library, regardless of how well-documented the verb sequence is.
+- **InClear (salt/mineral system) support** — confirmed to be architecturally simple (it's just
+  another `GeckoPack` subclass, same mechanism as every other pack), but actually implementing it
+  needs a real per-model pack config file, which requires either an existing one already in
+  `driver/packs/*.py` (not checked yet) or capturing one from an actual InClear-equipped spa's
+  config exchange. Not done here since it needs spa-specific data this reverse-engineering pass
+  didn't have access to.
+- **Installer/dealer-tier settings** (pump output remapping, keypad hardware config, InMix zone
+  wiring) — gated behind a dealer/technician cloud login even in the official app, so likely not
+  usable by a normal owner regardless of protocol support.
+- **`ETERR`/`ERRCI`** (extended connection error reporting) — verb names were found in a broad
+  string scan, but no confirmed payload format was recovered from IL disassembly. Not implemented
+  to avoid guessing at a format that could misparse real spa traffic.
+- **Cloud features** (account/dealer sharing, remote/away-from-home access) — these exist in the
+  app but require Gecko's authenticated cloud API, not the local UDP protocol. Architecturally out
+  of scope for a local-only library.
+
+### Confidence level
+
+Watercare schedule CRUD, RF channel write, and in.touch2 rename are all byte-exact, pulled
+directly from disassembled .NET IL of the shipped app (not inferred from UI behavior or guessed).
+None of this has been tested against a real spa yet — recommend testing schedule *read* first to
+confirm the parser matches your actual spa's data before attempting a write.
