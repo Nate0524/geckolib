@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from geckolib.const import GeckoConstants
+from geckolib.driver.protocol.watercare import GeckoWatercareSchedule
 
 from .base import GeckoAutomationFacadeBase
 
@@ -70,6 +71,46 @@ class GeckoWaterCare(GeckoAutomationFacadeBase):
             old_mode = self.active_mode
             self.active_mode = new_mode
             self._on_change(self, old_mode, self.active_mode)
+
+    async def async_get_schedules(self) -> list[GeckoWatercareSchedule]:
+        """
+        Get every watercare (filtration/economy) schedule entry, across all modes.
+
+        Use schedule.water_care_id to filter down to a specific mode's schedules if needed.
+        """
+        return await self._spa.async_get_watercare_schedules()
+
+    async def async_add_schedule(self, schedule: GeckoWatercareSchedule) -> bool:
+        """Add a new filtration/economy schedule entry. Returns True on success."""
+        result = await self._spa.async_add_watercare_schedule(schedule)
+        if result:
+            _LOGGER.debug("Added watercare schedule %s", schedule)
+        return result
+
+    async def async_delete_schedule(self, schedule: GeckoWatercareSchedule) -> bool:
+        """
+        Delete a schedule entry.
+
+        Only schedule.water_care_id/schedule_type/schedule_number are used to identify
+        which entry to remove -- get these from a schedule previously returned by
+        async_get_schedules().
+        """
+        result = await self._spa.async_delete_watercare_schedule(schedule)
+        if result:
+            _LOGGER.debug("Deleted watercare schedule %s", schedule)
+        return result
+
+    async def async_modify_schedule(self, schedule: GeckoWatercareSchedule) -> bool:
+        """
+        Modify an existing schedule entry.
+
+        schedule.schedule_number must match an entry previously returned by
+        async_get_schedules() -- this identifies the slot to overwrite.
+        """
+        result = await self._spa.async_modify_watercare_schedule(schedule)
+        if result:
+            _LOGGER.debug("Modified watercare schedule %s", schedule)
+        return result
 
     def __str__(self) -> str:
         """Stringise the class."""
