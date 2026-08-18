@@ -1,4 +1,10 @@
-"""Gecko REQRM/RMREQ handlers."""
+"""Gecko REQRM/RMREQ/SETRM/RMSET/RMERR handlers.
+
+RMERR added this session (reverse-engineered verb name confirmed via in.touch2 v2.11.0's
+decompiled .NET IL -- ReminderErrorCodeCommandAck = 'RMERR', paired with ReminderErrorCodeCommandName
+= 'ERRRM'). No payload beyond the verb itself, following the same pattern as watercare.py's
+existing WCERR handler.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +21,7 @@ REQRM_VERB = b"REQRM"  # Request all reminders
 RMREQ_VERB = b"RMREQ"  # Response with all 10 reminders
 SETRM_VERB = b"SETRM"  # Set all 10 reminders
 RMSET_VERB = b"RMSET"  # Ack for the reminder set
+RMERR_VERB = b"RMERR"  # Reminders error ack
 
 RESPONSE_FORMAT = ">BBB"
 
@@ -150,3 +157,14 @@ class GeckoRemindersProtocolHandler(GeckoPacketProtocolHandler):
             self._extract_reminders(remainder)
 
         self._should_remove_handler = True
+
+
+class GeckoRemindersErrorHandler(GeckoPacketProtocolHandler):
+    """Reminders error handler (RMERR)."""
+
+    def can_handle(self, received_bytes: bytes, _sender: tuple) -> bool:
+        """Can we handle this verb."""
+        return received_bytes.startswith(RMERR_VERB)
+
+    def handle(self, _received_bytes: bytes, _sender: tuple) -> None:
+        """Handle this."""
